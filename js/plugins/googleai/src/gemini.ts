@@ -994,7 +994,7 @@ function toThought(part: Part) {
   const outPart: any = { thought: true };
   if (part.metadata?.thoughtSignature)
     outPart.thoughtSignature = part.metadata.thoughtSignature;
-  if (part.reasoning?.length) outPart.text = part.reasoning;
+  if ("reasoning" in part) outPart.text = part.reasoning;
   return outPart;
 }
 

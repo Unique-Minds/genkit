@@ -180,7 +180,7 @@ function toGeminiToolResponse(part: Part): GeminiPart {
 
 function toGeminiReasoning(part: Part): GeminiPart {
   const out: GeminiPart = { thought: true };
-  if (part.reasoning?.length) {
+  if ("reasoning" in part) {
     out.text = part.reasoning;
   }
   return maybeAddGeminiThoughtSignature(part, out);
