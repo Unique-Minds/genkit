@@ -81,6 +81,8 @@ function toGeminiSchemaProperty(property?: ToolDefinition['inputSchema']) {
       type: SchemaType.OBJECT,
       properties: nestedProperties,
       required: property.required,
+      // this does not work.  see https://github.com/googleapis/python-genai/issues/1815
+      // additionalProperties: property.additionalProperties,
     };
   } else if (propertyType === 'array') {
     return {
@@ -204,6 +206,26 @@ function toGeminiText(part: Part): GeminiPart {
   return maybeAddGeminiThoughtSignature(part, { text: part.text ?? '' });
 }
 
+function getModelName(model?: ModelReference<any>): string {
+  if (!model) return '';
+  return model.name.toLowerCase();
+}
+
+function isGemini3(model?: ModelReference<any>): boolean {
+  const name = getModelName(model);
+  return name.includes('gemini-3');
+}
+
+function isGemini3Image(model?: ModelReference<any>): boolean {
+  const name = getModelName(model);
+  return name.includes('gemini-3-pro-image');
+}
+
+function isGemini25(model?: ModelReference<any>): boolean {
+  const name = getModelName(model);
+  return name.includes('gemini-2.5');
+}
+
 function maybeAddGeminiThoughtSignature(
   part: Part,
   geminiPart: GeminiPart
@@ -281,9 +303,85 @@ export function toGeminiMessage(
       return parseInt(aRef, 10) - parseInt(bRef, 10);
     });
   }
+
+  const geminiParts = sortedParts.map(toGeminiPart);
+  const isG3 = isGemini3(model);
+  const isG3Image = isGemini3Image(model);
+  const isG25 = isGemini25(model);
+
+  if (message.role === 'model' && (isG3 || isG25)) {
+    if (isG3Image) {
+      // For gemini-3-pro-image, thought signatures must be preserved on
+      // inlineData parts for conversational image editing. According to the API docs:
+      // - Signatures are guaranteed on the first part after thoughts (text or inlineData)
+      // - Signatures are on every subsequent inlineData part
+      // - All signatures must be preserved when forwarding messages to maintain context
+      // The toGeminiPart function already preserves signatures via maybeAddGeminiThoughtSignature,
+      // but we need to ensure signatures are present on the required parts to avoid 400 errors.
+      // see: https://ai.google.dev/gemini-api/docs/image-generation#thought-signatures
+      
+      // Find the first part after any thought parts that should have a signature
+      let foundFirstContentPart = false;
+      for (let i = 0; i < geminiParts.length; i++) {
+        const part = geminiParts[i];
+        // Skip thought parts (they don't need signatures in the output)
+        if (part.thought) {
+          continue;
+        }
+        
+        // For the first non-thought part (text or inlineData), ensure it has a signature
+        if (!foundFirstContentPart) {
+          foundFirstContentPart = true;
+          if (!part.thoughtSignature) {
+            // Use dummy signature to avoid 400 errors if no existing signature
+            part.thoughtSignature = 'context_engineering_is_the_way_to_go';
+          }
+        }
+        
+        // All subsequent inlineData parts must have signatures
+        if (foundFirstContentPart && part.inlineData && !part.thoughtSignature) {
+          // Use dummy signature to avoid 400 errors if no existing signature
+          part.thoughtSignature = 'context_engineering_is_the_way_to_go';
+        }
+      }
+    } else {
+      // For other Gemini 3 models, use the existing logic
+      // Extract any existing signature from any part
+      let existingSignature: string | undefined;
+      for (const part of sortedParts) {
+        if (part.metadata?.thoughtSignature) {
+          existingSignature = part.metadata.thoughtSignature as string;
+          break;
+        }
+      }
+
+      // Clear all existing signatures from Gemini parts to ensure correct positioning
+      geminiParts.forEach((p) => delete p.thoughtSignature);
+
+      if (isG3) {
+        const firstFCPart = geminiParts.find((p) => p.functionCall);
+        if (firstFCPart) {
+          // For Gemini 3, if function calls are present, the signature must be on the first one.
+          // A dummy signature is used if none exists to avoid 400 errors.
+          firstFCPart.thoughtSignature =
+            existingSignature || 'context_engineering_is_the_way_to_go';
+        } else if (existingSignature && geminiParts.length > 0) {
+          // If no function calls, Gemini 3 expects the signature on the last part.
+          geminiParts[geminiParts.length - 1].thoughtSignature =
+            existingSignature;
+        }
+      } else if (isG25) {
+        // For Gemini 2.5, the signature is expected on the first part.
+        if (existingSignature && geminiParts.length > 0) {
+          geminiParts[0].thoughtSignature = existingSignature;
+        }
+      }
+    }
+  }
+
   return {
     role: toGeminiRole(message.role, model),
-    parts: sortedParts.map(toGeminiPart),
+    parts: geminiParts,
   };
 }
 
