@@ -421,6 +421,10 @@ export function toGeminiFunctionModeEnum(
     case 'NONE': {
       return FunctionCallingMode.NONE;
     }
+    case 'validated':
+    case 'VALIDATED': {
+      return FunctionCallingMode.VALIDATED;
+    }
     default:
       throw new Error(`unsupported function calling mode: ${from}`);
   }

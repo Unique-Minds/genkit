@@ -37,6 +37,10 @@ export enum FunctionCallingMode {
    * not passing any function declarations.
    */
   NONE = 'NONE',
+  /**
+   * Model will validate the function calls against the provided function declarations. (preview)
+   */
+  VALIDATED = 'VALIDATED',
 }
 
 export function isObject(value: unknown): value is Record<string, unknown> {
