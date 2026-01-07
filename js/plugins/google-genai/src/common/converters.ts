@@ -114,7 +114,10 @@ function toGeminiMedia(part: Part): GeminiPart {
     const contentType =
       part.media.contentType ||
       dataUrl.substring(dataUrl.indexOf(':')! + 1, dataUrl.indexOf(';'));
-    media = { inlineData: { mimeType: contentType, data: b64Data } };
+    media = {
+      inlineData: { mimeType: contentType, data: b64Data,  },
+      ...(part.metadata?.thought ? {  thought: true } : {}),
+    };
   } else {
     // File data
     if (!part.media?.contentType) {
@@ -346,12 +349,25 @@ export function toGeminiMessage(
       }
     } else {
       // For other Gemini 3 models, use the existing logic
-      // Extract any existing signature from any part
+      // Extract any existing signature from any part (check both original parts and converted parts)
+      // This handles cases where switching from Gemini 2 to Gemini 3 may have the signature
+      // on a text part that comes before the function call part (even multiple parts before)
       let existingSignature: string | undefined;
+      
+      // Check the original parts for signatures in metadata (check all parts, not just first match)
       for (const part of sortedParts) {
         if (part.metadata?.thoughtSignature) {
           existingSignature = part.metadata.thoughtSignature as string;
-          break;
+          // Continue checking to find the last/most relevant signature if multiple exist
+        }
+      }
+      
+      // Also check the already-converted gemini parts (in case signature was added during conversion)
+      // This is important because maybeAddGeminiThoughtSignature copies metadata signatures to gemini parts
+      for (const geminiPart of geminiParts) {
+        if (geminiPart.thoughtSignature) {
+          existingSignature = geminiPart.thoughtSignature;
+          // Continue checking to find the last/most relevant signature if multiple exist
         }
       }
 
@@ -361,19 +377,28 @@ export function toGeminiMessage(
       if (isG3) {
         const firstFCPart = geminiParts.find((p) => p.functionCall);
         if (firstFCPart) {
-          // For Gemini 3, if function calls are present, the signature must be on the first one.
-          // A dummy signature is used if none exists to avoid 400 errors.
+          // For Gemini 3, if function calls are present, the signature MUST be on the first one.
+          // According to the API docs, when function calls are present, the signature must be
+          // on the first function call part, not on any text part that precedes it.
+          // Always use failsafe signature if none found to avoid 400 errors.
           firstFCPart.thoughtSignature =
             existingSignature || 'context_engineering_is_the_way_to_go';
         } else if (existingSignature && geminiParts.length > 0) {
           // If no function calls, Gemini 3 expects the signature on the last part.
           geminiParts[geminiParts.length - 1].thoughtSignature =
             existingSignature;
+        } else if (geminiParts.length > 0) {
+          // Failsafe: if no function calls and no signature found, add failsafe to last part
+          geminiParts[geminiParts.length - 1].thoughtSignature =
+            'context_engineering_is_the_way_to_go';
         }
       } else if (isG25) {
         // For Gemini 2.5, the signature is expected on the first part.
         if (existingSignature && geminiParts.length > 0) {
           geminiParts[0].thoughtSignature = existingSignature;
+        } else if (geminiParts.length > 0) {
+          // Failsafe: if no signature found, add failsafe to first part
+          geminiParts[0].thoughtSignature = 'context_engineering_is_the_way_to_go';
         }
       }
     }
@@ -492,6 +517,8 @@ function fromGeminiInlineData(part: GeminiPart): Part {
       url: dataUrl,
       contentType: mimeType,
     },
+    // the gemini-3-pro-image model may return images as a thought
+    ...(part.thought ? { metadata: { thought: part.thought } } : {}),
   });
 }
 
@@ -699,9 +726,9 @@ function fromGeminiPart(
   part: GeminiPart,
   previousChunks?: CandidateData[]
 ): Part {
+  if (part.inlineData) return fromGeminiInlineData(part);
   if (part.thought) return fromGeminiThought(part as any);
   if (typeof part.text === 'string') return fromGeminiText(part);
-  if (part.inlineData) return fromGeminiInlineData(part);
   if (part.fileData) return fromGeminiFileData(part);
   if (part.functionCall) return fromGeminiFunctionCall(part, previousChunks);
   if (part.functionResponse) return fromGeminiFunctionResponse(part);
