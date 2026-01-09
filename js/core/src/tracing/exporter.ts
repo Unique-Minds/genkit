@@ -157,14 +157,18 @@ export class TraceServerExporter implements SpanExporter {
         data.endTime = convertedSpan.endTime;
       }
     }
-    await fetch(`${telemetryServerUrl}/api/traces`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
+    try {
+      await fetch(`${telemetryServerUrl}/api/traces`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+    } catch (e: any) {
+      logger.debug(`Telemetry could not be sent to ${telemetryServerUrl} - ${e.cause?.code}`);
+    }
   }
 }
 
