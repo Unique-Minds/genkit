@@ -78,33 +78,40 @@ func DefinePrompt(r api.Registry, name string, opts ...PromptOption) Prompt {
 		pOpts.Config = modelRef.Config()
 	}
 
-	meta := p.Metadata
-	if meta == nil {
-		meta = map[string]any{}
-	}
-
 	var tools []string
 	for _, value := range pOpts.commonGenOptions.Tools {
 		tools = append(tools, value.Name())
 	}
 
-	promptMeta := map[string]any{
-		"type": api.ActionTypeExecutablePrompt,
-		"prompt": map[string]any{
-			"name":         name,
-			"description":  p.Description,
-			"model":        modelName,
-			"config":       p.Config,
-			"input":        map[string]any{"schema": p.InputSchema},
-			"output":       map[string]any{"schema": p.OutputSchema},
-			"defaultInput": p.DefaultInput,
-			"tools":        tools,
-			"maxTurns":     p.MaxTurns,
-		},
+	metadata := p.Metadata
+	if metadata == nil {
+		metadata = map[string]any{}
 	}
-	maps.Copy(meta, promptMeta)
+	metadata["type"] = api.ActionTypeExecutablePrompt
 
-	p.ActionDef = *core.DefineAction(r, name, api.ActionTypeExecutablePrompt, meta, p.InputSchema, p.buildRequest)
+	baseName := name
+	if idx := strings.LastIndex(name, "."); idx != -1 {
+		baseName = name[:idx]
+	}
+
+	promptMetadata := map[string]any{
+		"name":         baseName,
+		"description":  p.Description,
+		"model":        modelName,
+		"config":       p.Config,
+		"input":        map[string]any{"schema": p.InputSchema},
+		"output":       map[string]any{"schema": p.OutputSchema},
+		"defaultInput": p.DefaultInput,
+		"tools":        tools,
+		"maxTurns":     p.MaxTurns,
+	}
+	if m, ok := metadata["prompt"].(map[string]any); ok {
+		maps.Copy(m, promptMetadata)
+	} else {
+		metadata["prompt"] = promptMetadata
+	}
+
+	p.ActionDef = *core.DefineAction(r, name, api.ActionTypeExecutablePrompt, metadata, p.InputSchema, p.buildRequest)
 
 	return p
 }
@@ -250,6 +257,27 @@ func (p *prompt) Render(ctx context.Context, input any) (*GenerateActionOptions,
 	return p.Run(ctx, input, nil)
 }
 
+// Desc returns a descriptor of the prompt with resolved schema references.
+func (p *prompt) Desc() api.ActionDesc {
+	desc := p.ActionDef.Desc()
+	promptMeta := desc.Metadata["prompt"].(map[string]any)
+	if inputMeta, ok := promptMeta["input"].(map[string]any); ok {
+		if inputSchema, ok := inputMeta["schema"].(map[string]any); ok {
+			if resolved, err := core.ResolveSchema(p.registry, inputSchema); err == nil {
+				inputMeta["schema"] = resolved
+			}
+		}
+	}
+	if outputMeta, ok := promptMeta["output"].(map[string]any); ok {
+		if outputSchema, ok := outputMeta["schema"].(map[string]any); ok {
+			if resolved, err := core.ResolveSchema(p.registry, outputSchema); err == nil {
+				outputMeta["schema"] = resolved
+			}
+		}
+	}
+	return desc
+}
+
 // buildVariables returns a map holding prompt field values based
 // on a struct or a pointer to a struct. The struct value should have
 // JSON tags that correspond to the Prompt's input schema.
@@ -353,6 +381,11 @@ func (p *prompt) buildRequest(ctx context.Context, input any) (*GenerateActionOp
 		modelName = p.Model.Name()
 	}
 
+	outputSchema, err := core.ResolveSchema(p.registry, p.OutputSchema)
+	if err != nil {
+		return nil, core.NewError(core.INVALID_ARGUMENT, "invalid output schema for prompt %q: %v", p.Name(), err)
+	}
+
 	return &GenerateActionOptions{
 		Model:              modelName,
 		Config:             config,
@@ -363,7 +396,7 @@ func (p *prompt) buildRequest(ctx context.Context, input any) (*GenerateActionOp
 		Tools:              tools,
 		Output: &GenerateActionOutputConfig{
 			Format:       p.OutputFormat,
-			JsonSchema:   p.OutputSchema,
+			JsonSchema:   outputSchema,
 			Instructions: p.OutputInstructions,
 			Constrained:  !p.CustomConstrained,
 		},
@@ -605,16 +638,23 @@ func LoadPrompt(r api.Registry, dir, filename, namespace string) Prompt {
 		toolRefs[i] = ToolName(tool)
 	}
 
-	promptMetadata := map[string]any{
-		"template": parsedPrompt.Template,
+	promptOptMetadata := metadata.Metadata
+	if promptOptMetadata == nil {
+		promptOptMetadata = make(map[string]any)
 	}
-	maps.Copy(promptMetadata, metadata.Metadata)
 
-	promptOptMetadata := map[string]any{
-		"type":   "prompt",
-		"prompt": promptMetadata,
+	var promptMetadata map[string]any
+	if m, ok := promptOptMetadata["prompt"].(map[string]any); ok {
+		promptMetadata = m
+	} else {
+		promptMetadata = make(map[string]any)
 	}
-	maps.Copy(promptOptMetadata, metadata.Metadata)
+	promptMetadata["template"] = parsedPrompt.Template
+	if variant != "" {
+		promptMetadata["variant"] = variant
+	}
+	promptOptMetadata["prompt"] = promptMetadata
+	promptOptMetadata["type"] = api.ActionTypeExecutablePrompt
 
 	opts := &promptOptions{
 		commonGenOptions: commonGenOptions{
@@ -624,9 +664,11 @@ func LoadPrompt(r api.Registry, dir, filename, namespace string) Prompt {
 			Model: NewModelRef(metadata.Model, nil),
 			Tools: toolRefs,
 		},
-		DefaultInput: metadata.Input.Default,
-		Metadata:     promptOptMetadata,
-		Description:  metadata.Description,
+		inputOptions: inputOptions{
+			DefaultInput: metadata.Input.Default,
+		},
+		Metadata:    promptOptMetadata,
+		Description: metadata.Description,
 	}
 
 	if toolChoice, ok := metadata.Raw["toolChoice"].(ToolChoice); ok {
@@ -642,7 +684,11 @@ func LoadPrompt(r api.Registry, dir, filename, namespace string) Prompt {
 	}
 
 	if inputSchema, ok := metadata.Input.Schema.(*jsonschema.Schema); ok {
-		opts.InputSchema = base.SchemaAsMap(inputSchema)
+		if inputSchema.Ref != "" {
+			opts.InputSchema = core.SchemaRef(inputSchema.Ref)
+		} else {
+			opts.InputSchema = base.SchemaAsMap(inputSchema)
+		}
 	}
 
 	if inputSchema, ok := metadata.Input.Schema.(map[string]any); ok {
@@ -654,7 +700,11 @@ func LoadPrompt(r api.Registry, dir, filename, namespace string) Prompt {
 	}
 
 	if outputSchema, ok := metadata.Output.Schema.(*jsonschema.Schema); ok {
-		opts.OutputSchema = base.SchemaAsMap(outputSchema)
+		if outputSchema.Ref != "" {
+			opts.OutputSchema = core.SchemaRef(outputSchema.Ref)
+		} else {
+			opts.OutputSchema = base.SchemaAsMap(outputSchema)
+		}
 		if opts.OutputFormat == "" {
 			opts.OutputFormat = OutputFormatJSON
 		}
@@ -696,12 +746,10 @@ func LoadPrompt(r api.Registry, dir, filename, namespace string) Prompt {
 
 	promptOpts := []PromptOption{opts}
 
-	// Add system prompt if found
 	if systemText != "" {
 		promptOpts = append(promptOpts, WithSystem(systemText))
 	}
 
-	// If there are non-system messages, use WithMessages, otherwise use WithPrompt for template
 	if len(nonSystemMessages) > 0 {
 		promptOpts = append(promptOpts, WithMessages(nonSystemMessages...))
 	} else if systemText == "" {
