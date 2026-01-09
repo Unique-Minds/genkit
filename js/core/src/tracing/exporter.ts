@@ -160,18 +160,18 @@ export class TraceServerExporter implements SpanExporter {
     }
     try {
       // Suppress tracing to prevent infinite loops when auto-instrumentation
-    // (e.g., undici) is enabled. Without this, the fetch call would be traced,
-    // creating new spans that trigger more exports, causing stack overflow.
-    await context.with(suppressTracing(context.active()), () =>
-      fetch(`${telemetryServerUrl}/api/traces`, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(data),
-        })
-    );
+      // (e.g., undici) is enabled. Without this, the fetch call would be traced,
+      // creating new spans that trigger more exports, causing stack overflow.
+      await context.with(suppressTracing(context.active()), () =>
+        fetch(`${telemetryServerUrl}/api/traces`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+          })
+      );
     } catch (e: any) {
       logger.debug(`Telemetry could not be sent to ${telemetryServerUrl} - ${e.cause?.code}`);
     }
