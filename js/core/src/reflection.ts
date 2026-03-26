@@ -103,7 +103,7 @@ export class ReflectionServer {
   }
 
   get runtimeId() {
-    return `${process.pid}${this.port !== null ? `-${this.port}` : ''}`;
+    return process.env.GENKIT_RUNTIME_ID || `${process.pid}${this.port !== null ? `-${this.port}` : ''}`;
   }
 
   /**
@@ -430,15 +430,14 @@ export class ReflectionServer {
       const rootDir = await findProjectRoot();
       const runtimesDir = path.join(rootDir, '.genkit', 'runtimes');
       const date = new Date();
-      const time = date.getTime();
       const timestamp = date.toISOString();
       this.runtimeFilePath = path.join(
         runtimesDir,
-        `${this.runtimeId}-${time}.json`
+        `${this.runtimeId}.json`
       );
       const fileContent = JSON.stringify(
         {
-          id: process.env.GENKIT_RUNTIME_ID || this.runtimeId,
+          id: this.runtimeId,
           pid: process.pid,
           name: this.options.name,
           reflectionServerUrl: `http://localhost:${this.port}`,
