@@ -221,7 +221,8 @@ function isGemini3(model?: ModelReference<any>): boolean {
 
 function isGemini3Image(model?: ModelReference<any>): boolean {
   const name = getModelName(model);
-  return name.includes('gemini-3-pro-image');
+  // example: gemini-3-pro-image, gemini-3.1-flash-image
+  return /gemini-3(\.\d+)?-[a-z]+-image/.test(name);
 }
 
 function isGemini25(model?: ModelReference<any>): boolean {
