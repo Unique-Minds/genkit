@@ -379,7 +379,13 @@ async function makeRequest(
     }
     return response;
   } catch (e: unknown) {
+    // dont handle abort errors
+    if (e instanceof Error && e.name === "AbortError") {
+      throw e;
+    }
+
     logger.error(e);
+    
     if (e instanceof GenkitError) {
       throw e;
     }
