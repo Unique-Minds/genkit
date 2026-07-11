@@ -1,14 +1,12 @@
 module joke-flow-telemetry
 
-go 1.24.1
-
-toolchain go1.24.6
+go 1.25.0
 
 replace github.com/firebase/genkit/go => ../../../
 
 require (
 	github.com/firebase/genkit/go v0.0.0-00010101000000-000000000000
-	google.golang.org/genai v1.30.0
+	google.golang.org/genai v1.40.0
 )
 
 require (
@@ -71,12 +69,12 @@ require (
 	go.opentelemetry.io/otel/sdk v1.36.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.36.0 // indirect
 	go.opentelemetry.io/otel/trace v1.36.0 // indirect
-	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/api v0.236.0 // indirect
 	google.golang.org/appengine/v2 v2.0.6 // indirect
