@@ -886,23 +886,22 @@ wheels = [
 
 [[package]]
 name = "datamodel-code-generator"
-version = "0.43.1"
+version = "0.64.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "argcomplete" },
-    { name = "black" },
+    { name = "black", marker = "sys_platform != 'emscripten'" },
     { name = "genson" },
     { name = "inflect" },
-    { name = "isort" },
+    { name = "isort", marker = "sys_platform != 'emscripten'" },
     { name = "jinja2" },
-    { name = "packaging" },
     { name = "pydantic" },
     { name = "pyyaml" },
-    { name = "tomli", marker = "python_full_version < '3.12'" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/56/89/424f0d73f96bc461f89fe9a60755c86692cabeab8dd5e8227e154fb0a403/datamodel_code_generator-0.43.1.tar.gz", hash = "sha256:269af3f81b89f6aa70118edd0d68a74164ae615827c46d71462c2e96441e40ae", size = 518833, upload-time = "2025-12-12T07:03:28.81Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/d2/86c94a2836ed42231653a7ddaefa0a5bc23418167a876bba7376c96b3a35/datamodel_code_generator-0.64.0.tar.gz", hash = "sha256:9c592900a00b20e416494273c22435f5a9aef6ea8c7b9190747522a60497a1cb", size = 1316440, upload-time = "2026-06-14T17:24:50.528Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/5e/afad23a916a5e9979e0626c34ecedbd00284305ae5525cef2dbbdfddacd7/datamodel_code_generator-0.43.1-py3-none-any.whl", hash = "sha256:5b2a1c47c6940d441e7394765affce614fadb627853370a385953c718137ead5", size = 173009, upload-time = "2025-12-12T07:03:27.223Z" },
+    { url = "https://files.pythonhosted.org/packages/23/94/71338e2f0146ac10747a5537b3a1e45256e66b7c229869eb0ee787111b41/datamodel_code_generator-0.64.0-py3-none-any.whl", hash = "sha256:b7cd8bd41a312aa997aec6150670bad781847c5b674f17e4d70e78208a0fb990", size = 374698, upload-time = "2026-06-14T17:24:48.809Z" },
 ]
 
 [[package]]
@@ -1886,7 +1885,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bpython", specifier = ">=0.25" },
-    { name = "datamodel-code-generator", specifier = ">=0.27.3" },
+    { name = "datamodel-code-generator", specifier = ">=0.64.0" },
     { name = "ipython", marker = "python_full_version < '3.11'", specifier = "~=8.22" },
     { name = "ipython", marker = "python_full_version >= '3.11'", specifier = "~=9.0.2" },
     { name = "jupyter", specifier = ">=1.1.1" },
